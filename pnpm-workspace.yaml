@@ -1,0 +1,14 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+  - "packages/config/*"
+
+# Scripts de build aprobados para paquetes nativos y generadores
+allowBuilds:
+  '@nestjs/core': true
+  '@prisma/client': true
+  '@prisma/engines': true
+  'prisma': true
+  'msgpackr-extract': true
+  'sharp': true
+  '@scarf/scarf': false

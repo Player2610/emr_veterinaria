@@ -1,0 +1,330 @@
+// ============================================================
+// EMR Veterinaria — Prisma Schema
+// Multi-tenant SaaS: tenant isolation via Row-Level Security
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────
+
+enum UserRole {
+  SUPER_ADMIN
+  TENANT_ADMIN
+  VET
+  ASSISTANT
+  PET_OWNER
+}
+
+enum Species {
+  DOG
+  CAT
+  BIRD
+  RABBIT
+  HAMSTER
+  GUINEA_PIG
+  FERRET
+  TURTLE
+  SNAKE
+  LIZARD
+  FISH
+  HORSE
+  COW
+  PIG
+  SHEEP
+  GOAT
+  OTHER
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  UNKNOWN
+}
+
+enum AppointmentStatus {
+  PENDING_CONFIRMATION
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+  RESCHEDULED
+}
+
+enum AppointmentType {
+  GENERAL_CHECKUP
+  VACCINATION
+  SURGERY
+  EMERGENCY
+  FOLLOW_UP
+  SPECIALIST
+  GROOMING
+  LABORATORY
+  IMAGING
+  OTHER
+}
+
+enum TenantPlan {
+  FREE
+  PRO
+  CLINIC
+  ENTERPRISE
+}
+
+// ─── Models ──────────────────────────────────────────────────
+
+/// Una clínica veterinaria suscrita al SaaS.
+model Tenant {
+  id       String     @id @default(cuid())
+  /// Subdominio único: miclínica.app.com
+  slug     String     @unique
+  name     String
+  plan     TenantPlan @default(FREE)
+  /// Configuración general del tenant (TenantSettings)
+  settings Json       @default("{}")
+  /// Personalización visual (colores, logo, etc.)
+  theme    Json       @default("{}")
+  isActive Boolean    @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users          User[]
+  owners         Owner[]
+  pets           Pet[]
+  vets           Vet[]
+  appointments   Appointment[]
+  medicalRecords MedicalRecord[]
+  attachments    Attachment[]
+  auditLogs      AuditLog[]
+
+  @@map("tenants")
+}
+
+/// Miembro del staff o dueño de mascota con cuenta en la plataforma.
+model User {
+  id           String   @id @default(cuid())
+  tenantId     String
+  email        String
+  passwordHash String?
+  firstName    String
+  lastName     String
+  phone        String?
+  role         UserRole
+  isActive     Boolean  @default(true)
+  avatarUrl         String?
+  /// Hash bcrypt del refresh token activo (rotatorio); null = sesión cerrada
+  refreshTokenHash  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  vet       Vet?
+  owner     Owner?
+  auditLogs AuditLog[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("users")
+}
+
+/// Dueño/tutor de una o más mascotas.
+model Owner {
+  id       String  @id @default(cuid())
+  tenantId String
+  /// Enlace opcional a cuenta de usuario (app móvil)
+  userId   String? @unique
+  firstName String
+  lastName  String
+  email     String?
+  phone     String
+  address   String?
+  notes     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  pets         Pet[]
+  appointments Appointment[]
+
+  @@index([tenantId])
+  @@index([tenantId, email])
+  @@map("owners")
+}
+
+/// Mascota / paciente de la clínica.
+model Pet {
+  id          String    @id @default(cuid())
+  tenantId    String
+  ownerId     String
+  name        String
+  species     Species
+  breed       String?
+  color       String?
+  gender      Gender
+  birthDate   DateTime?
+  /// Peso en kg con 2 decimales
+  weight      Decimal?  @db.Decimal(6, 2)
+  microchipId String?
+  photoUrl    String?
+  isDeceased  Boolean   @default(false)
+  notes       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  owner          Owner           @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  medicalRecords MedicalRecord[]
+  appointments   Appointment[]
+
+  @@index([tenantId])
+  @@index([tenantId, ownerId])
+  @@index([tenantId, species])
+  @@map("pets")
+}
+
+/// Perfil veterinario extendido de un usuario con rol VET.
+model Vet {
+  id             String   @id @default(cuid())
+  tenantId       String
+  userId         String   @unique
+  licenseNumber  String?
+  specialities   String[]
+  bio            String?
+  /// JSON con la configuración de disponibilidad semanal
+  availableSlots Json?
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointments   Appointment[]
+  medicalRecords MedicalRecord[]
+
+  @@index([tenantId])
+  @@map("vets")
+}
+
+/// Cita médica entre un paciente, su dueño y (opcionalmente) un veterinario.
+model Appointment {
+  id        String            @id @default(cuid())
+  tenantId  String
+  petId     String
+  vetId     String?
+  ownerId   String
+  title     String
+  notes     String?
+  status    AppointmentStatus @default(PENDING_CONFIRMATION)
+  startTime DateTime
+  endTime   DateTime
+  type      AppointmentType   @default(GENERAL_CHECKUP)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pet           Pet            @relation(fields: [petId], references: [id], onDelete: Restrict)
+  vet           Vet?           @relation(fields: [vetId], references: [id], onDelete: SetNull)
+  owner         Owner          @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  medicalRecord MedicalRecord?
+
+  @@index([tenantId])
+  @@index([tenantId, vetId])
+  @@index([tenantId, petId])
+  @@index([tenantId, status])
+  @@index([tenantId, startTime])
+  @@map("appointments")
+}
+
+/// Historia clínica de una consulta / visita.
+model MedicalRecord {
+  id             String    @id @default(cuid())
+  tenantId       String
+  petId          String
+  /// Veterinario que redacta el registro (nullable si aún sin asignar)
+  vetId          String?
+  appointmentId  String?   @unique
+  chiefComplaint String
+  anamnesis      String?
+  /// { weight, temperature, heartRate, respiratoryRate, bloodPressure, ... }
+  physicalExam   Json?
+  /// [{ code, description, isPrimary }]
+  diagnoses      Json[]    @default([])
+  /// [{ name, dose, frequency, duration, route }]
+  treatments     Json[]    @default([])
+  /// [{ drug, dose, instructions, durationDays }]
+  prescriptions  Json[]    @default([])
+  notes          String?
+  followUpDate   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pet         Pet          @relation(fields: [petId], references: [id], onDelete: Restrict)
+  vet         Vet?         @relation(fields: [vetId], references: [id], onDelete: SetNull)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  attachments Attachment[]
+
+  @@index([tenantId])
+  @@index([tenantId, petId])
+  @@index([tenantId, vetId])
+  @@index([tenantId, createdAt])
+  @@map("medical_records")
+}
+
+/// Archivo adjunto a una historia clínica (imagen, PDF, radiografía, etc.).
+model Attachment {
+  id              String @id @default(cuid())
+  tenantId        String
+  medicalRecordId String
+  name            String
+  /// Tipo MIME (image/jpeg, application/pdf, etc.)
+  type            String
+  /// Clave en S3 / R2
+  url             String
+  /// Tamaño en bytes
+  size            Int
+
+  createdAt DateTime @default(now())
+
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  medicalRecord MedicalRecord @relation(fields: [medicalRecordId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([medicalRecordId])
+  @@map("attachments")
+}
+
+/// Registro de auditoría inmutable para todas las acciones sensibles.
+model AuditLog {
+  id         String  @id @default(cuid())
+  tenantId   String
+  userId     String
+  /// READ_RECORD, UPDATE_RECORD, DELETE_PET, etc.
+  action     String
+  /// medical_records, pets, appointments, etc.
+  resource   String
+  resourceId String
+  /// cambios antes/después, IP, user-agent
+  meta       Json?
+
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, resource, resourceId])
+  @@index([tenantId, userId])
+  @@index([tenantId, createdAt])
+  @@map("audit_logs")
+}

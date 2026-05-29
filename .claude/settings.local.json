@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(pnpm --version)",
+      "Bash(npm install *)",
+      "Bash(docker compose *)",
+      "Bash(pnpm --filter @emr/api type-check)",
+      "Bash(pnpm --filter @emr/web type-check)",
+      "Bash(wait)",
+      "Bash(pnpm --filter @emr/database db:generate)",
+      "Bash(pnpm --filter @emr/web dev)",
+      "Bash(Get-ChildItem *)"
+    ]
+  }
+}

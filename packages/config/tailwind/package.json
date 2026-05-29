@@ -1,0 +1,12 @@
+{
+  "name": "@emr/tailwind-config",
+  "version": "0.0.1",
+  "private": true,
+  "files": [
+    "tailwind.config.ts"
+  ],
+  "devDependencies": {
+    "tailwindcss": "^3.4.17",
+    "tailwindcss-animate": "^1.0.7"
+  }
+}
