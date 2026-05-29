@@ -7,9 +7,14 @@ cd "$REPO_ROOT"
 
 npm install -g pnpm@9
 
-# Install ALL deps (including devDeps needed for build: prisma, nest, tsc)
-# NODE_ENV=production causes pnpm to skip devDeps, so we override it here
+# Install ALL deps (including devDeps: prisma, nest, tsc)
 NODE_ENV=development pnpm install --frozen-lockfile
 
+# 1. Build @emr/shared first — API imports from ./dist/, not ./src/
+pnpm --filter @emr/shared build
+
+# 2. Generate Prisma client
 pnpm --filter @emr/database db:generate
+
+# 3. Build NestJS API
 pnpm --filter @emr/api build
