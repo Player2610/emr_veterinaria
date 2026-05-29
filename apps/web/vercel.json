@@ -1,0 +1,5 @@
+{
+  "buildCommand": "pnpm --filter @emr/shared build && next build",
+  "outputDirectory": ".next",
+  "framework": "nextjs"
+}
