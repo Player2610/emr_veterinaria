@@ -37,11 +37,12 @@ export class AuthService {
     }
     const tenantId = tenant.id;
 
-    await this.prisma.setTenantContext(tenantId);
-
     // Find user by email within the tenant context (RLS filters by tenant)
-    const user = await this.prisma.user.findFirst({
-      where: { email: dto.email, tenantId },
+    // Must run within a transaction so the RLS context is kept on the same connection
+    const user = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.user.findFirst({
+        where: { email: dto.email, tenantId },
+      });
     });
 
     if (!user) {
@@ -79,9 +80,9 @@ export class AuthService {
     tenantId: string,
     incomingRefreshToken: string,
   ): Promise<TokenPair> {
-    await this.prisma.setTenantContext(tenantId);
-
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.user.findUnique({ where: { id: userId } });
+    });
     if (!user?.refreshTokenHash) {
       throw new UnauthorizedException('No active session');
     }
@@ -116,27 +117,29 @@ export class AuthService {
   }
 
   async logout(userId: string, tenantId: string): Promise<void> {
-    await this.prisma.setTenantContext(tenantId);
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { refreshTokenHash: null },
+    await this.prisma.withTenant(tenantId, async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { refreshTokenHash: null },
+      });
     });
   }
 
   async getMe(userId: string, tenantId: string) {
-    await this.prisma.setTenantContext(tenantId);
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        role: true,
-        avatarUrl: true,
-        tenantId: true,
-        createdAt: true,
-      },
+    const user = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          role: true,
+          avatarUrl: true,
+          tenantId: true,
+          createdAt: true,
+        },
+      });
     });
     if (!user) {
       throw new UnauthorizedException('User not found');
