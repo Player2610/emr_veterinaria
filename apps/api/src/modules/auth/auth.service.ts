@@ -33,7 +33,7 @@ export class AuthService {
     });
     
     if (!tenant) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException('Invalid credentials (tenant not found)');
     }
     const tenantId = tenant.id;
 
@@ -46,15 +46,15 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException('Invalid credentials (user not found)');
     }
 
     if (!user.passwordHash) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException('Invalid credentials (no password hash)');
     }
     const passwordValid = await bcrypt.compare(dto.password, user.passwordHash);
     if (!passwordValid) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException('Invalid credentials (wrong password)');
     }
 
     const tokens = await this.generateTokenPair({
