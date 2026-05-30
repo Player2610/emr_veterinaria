@@ -42,8 +42,12 @@ export class PrismaService
    *   const pets = await this.prisma.pet.findMany();
    */
   async setTenantContext(tenantId: string): Promise<void> {
+    // SET LOCAL scopes the variable to the current transaction, which is
+    // required for PgBouncer transaction-mode compatibility (Neon pooler).
+    // The Neon owner role bypasses RLS anyway; WHERE tenantId clauses enforce
+    // isolation at the query level regardless.
     await this.$executeRawUnsafe(
-      `SET app.current_tenant_id = '${tenantId.replace(/'/g, "''")}'`,
+      `SET LOCAL app.current_tenant_id = '${tenantId.replace(/'/g, "''")}'`,
     );
   }
 
