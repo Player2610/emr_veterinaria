@@ -21,21 +21,23 @@ async function bootstrap(): Promise<void> {
   const apiPrefix = configService.get<string>('app.apiPrefix') ?? 'v1';
   const nodeEnv = configService.get<string>('app.nodeEnv') ?? 'development';
 
-  // ── Security headers ──────────────────────────────────────────────────────
-  app.use(
-    helmet({
-      // Allow Swagger UI to load in development
-      contentSecurityPolicy: nodeEnv === 'production' ? undefined : false,
-    }),
-  );
-
-  // ── CORS ──────────────────────────────────────────────────────────────────
+  // ── CORS (must be registered BEFORE helmet) ────────────────────────────────
   app.enableCors({
     origin: corsOrigins.length > 0 ? corsOrigins : true,
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-id'],
     credentials: true,
   });
+
+  // ── Security headers ──────────────────────────────────────────────────────
+  app.use(
+    helmet({
+      // Allow Swagger UI to load in development
+      contentSecurityPolicy: nodeEnv === 'production' ? undefined : false,
+      // Allow cross-origin requests (required for API consumed by a different domain)
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
 
   // ── Global prefix ─────────────────────────────────────────────────────────
   app.setGlobalPrefix(apiPrefix, {
